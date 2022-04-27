@@ -144,10 +144,10 @@ def fullPlot(mean, quantiles, name="Plot.png", CCC=0, num = 0):
         plt.title("GPR Warped 6 Annotators F" + str(i))
         fig = plt.gcf()
         fig.set_size_inches((25, 10), forward=False)
-        fig.savefig('WarpedFinal/' + name + '_Dev_' + str(i) + '.png', dpi=500)
+        fig.savefig('Tests/' + name + '_Dev_' + str(i) + '.png', dpi=500)
         plt.close()
         #plt.show()
-    f = open('WarpedFinal/Warped' + str(num) + '.txt', mode='w')
+    f = open('Tests/Warped' + str(num) + '.txt', mode='w')
     f.write("Final CCC is " + CCC)
     f.write("\nValues:")
     f.write('\n' + str(m))
@@ -194,15 +194,31 @@ def loadFile(X, Y, name='tester.npy'):
 def saveModel(m, name='tester.npy'):
     np.save(name, m.param_array)
 
-def MSE(predicted, actual, variance):
+def MSE(predicted, actual, Y):
     n = len(predicted)
-    minVar = min(variance)
-    maxVar = max(variance)
+    variance = np.std(Y, axis=1)
+    minVar = variance.min()
+    maxVar = variance.max()
     decile = (maxVar - minVar)/10
     MSEs = np.zeros(10, dtype=float)
-    for i in range(0, len(variance)):
-        MSEs[variance[i]//decile] += (actual - predicted)**2
-    return MSEs/n
+    for i in range(0, variance.size):
+        #print(i)
+        val = np.floor((variance[i]-minVar)/decile)
+        if (val == 10):
+            val = 9
+        MSEs[int(val)] += (actual[i] - predicted[i])**2
+    final = MSEs/n
+    axis = np.arange(minVar, maxVar, decile)
+    plt.plot(axis,final, linestyle='-', marker='x')
+    plt.title('Warped MSE Plot')
+    plt.xlabel('Variances')
+    plt.ylabel('Error')
+    fig = plt.gcf()
+    fig.set_size_inches((25, 10), forward=False)
+    fig.savefig('Tests/MSE.png', dpi=500)
+    #fig.savefig('BasicFinal/MSE.png', dpi=500)
+    plt.close()
+    return final
         
 # extractFeatures('train_1.wav', 'features/PCA/train_1.csv', 1)
 # extractFeatures('train_2.wav', 'features/PCA/train_2.csv', 1)
@@ -221,31 +237,31 @@ Y = np.genfromtxt('features/Full Feature/ratings_train.csv', delimiter=',')
 #X, Y = getInputs(file = "test_")
 # print(X.shape)
 # print(Y.shape)
-m = loadFile(X, Y, 'WarpedFinal/Warped360.npy')
+m = loadFile(X, Y, 'Tests/Warped824.npy')
 
 #m = WarpedModelSimple(X, Y, kernel)
 #m = GPy.models.SparseGPRegression(X, Y, kernel, infer=NewInference())
 
 testFeat = np.genfromtxt('features/Full Feature/features_dev.csv', delimiter=',')
-testRatings = np.genfromtxt('features/Full Feature/ratings_dev.csv', delimiter=',')
+testRatingss = np.genfromtxt('features/Full Feature/ratings_dev.csv', delimiter=',')
 
-testRatings = np.mean(testRatings.astype(np.float64), axis = 1)
+testRatings = np.mean(testRatingss.astype(np.float64), axis = 1)
 
-mean, variance, new = m.predict(testFeat)  
-quantiles = m.predict_quantiles(testFeat)
+# mean, variance, new = m.predict(testFeat)  
+# quantiles = m.predict_quantiles(testFeat)
 # print(mean.flatten().shape)
 # print(testRatings.flatten().shape)
-CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
-print("CCC is " + CCC)
+# CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
+# print("CCC is " + CCC)
 #fullPlot(mean, quantiles, name=('Warped' + str(22)), CCC=CCC, num = 0)
-x = 361
+x = 825
 while (m.optimize(optimizer = 'SCG', messages=True, max_iters=200).status == 'maxiter exceeded'):
     mean, variance, new = m.predict(testFeat)  
     quantiles = m.predict_quantiles(testFeat)
     CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
     print("CCC is " + CCC)
     #fullPlot(mean, quantiles, name=('WarpedRecent'), CCC=CCC, num = x)
-    f = open('WarpedFinal/Warped' + str(x) + '.txt', mode='w')
+    f = open('Tests/Warped' + str(x) + '.txt', mode='w')
     f.write("Final CCC is " + CCC)
     f.write("\nValues:")
     f.write('\n' + str(m))
@@ -254,7 +270,7 @@ while (m.optimize(optimizer = 'SCG', messages=True, max_iters=200).status == 'ma
     f.write("\nInducing Inputs:")  
     f.write('\n' + str(m.inducing_inputs))
     f.close()
-    saveModel(m, name=('WarpedFinal/Warped' + str(x) + '.npy'))
+    saveModel(m, name=('Tests/Warped' + str(x) + '.npy'))
     x += 1
     
 
@@ -264,6 +280,6 @@ mean, variance, new = m.predict(testFeat)
 quantiles = m.predict_quantiles(testFeat)
 CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
 print("Final CCC is " + CCC)
-saveModel(m, name=('WarpedFinal/Final.npy'))
+saveModel(m, name=('Tests/Final.npy'))
 fullPlot(mean, quantiles, name=('Warped' + str(x)), num = x, CCC=CCC)
 

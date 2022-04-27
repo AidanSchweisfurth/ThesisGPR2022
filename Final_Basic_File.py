@@ -194,15 +194,32 @@ def loadFile(X, Y, name='tester.npy'):
 def saveModel(m, name='tester.npy'):
     np.save(name, m.param_array)
 
-def MSE(predicted, actual, variance):
+def MSE(predicted, actual, Y):
     n = len(predicted)
-    minVar = min(variance)
-    maxVar = max(variance)
+    variance = np.std(Y, axis=1)
+    #print(variance.shape)
+    minVar = variance.min()
+    maxVar = variance.max()
     decile = (maxVar - minVar)/10
     MSEs = np.zeros(10, dtype=float)
-    for i in range(0, len(variance)):
-        MSEs[variance[i]//decile] += (actual - predicted)**2
-    return MSEs/n
+    for i in range(0, variance.size):
+        #print(i)
+        val = np.floor((variance[i]-minVar)/decile)
+        if (val == 10):
+            val = 9
+        MSEs[int(val)] += (actual[i] - predicted[i])**2
+    final = MSEs/n
+    axis = np.arange(minVar, maxVar, decile)
+    plt.plot(axis,final, linestyle='-', marker='x')
+    plt.title('Basic MSE Plot')
+    plt.xlabel('Variances')
+    plt.ylabel('Error')
+    fig = plt.gcf()
+    fig.set_size_inches((25, 10), forward=False)
+    #fig.savefig('WarpedFinal/MSE.png', dpi=500)
+    fig.savefig('BasicFinal/MSE.png', dpi=500)
+    plt.close()
+    return final
         
 # extractFeatures('train_1.wav', 'features/PCA/train_1.csv', 1)
 # extractFeatures('train_2.wav', 'features/PCA/train_2.csv', 1)
@@ -221,15 +238,15 @@ Y = np.genfromtxt('features/Full Feature/ratings_train.csv', delimiter=',')
 #X, Y = getInputs(file = "test_")
 # print(X.shape)
 # print(Y.shape)
-m = loadFile(X, Y, 'BasicFinal/Basic363.npy')
+m = loadFile(X, Y, 'BasicFinal/Basic708.npy')
 
 #m = WarpedModelSimple(X, Y, kernel)
 #m = GPy.models.SparseGPRegression(X, Y, kernel, infer=NewInference())
 
 testFeat = np.genfromtxt('features/Full Feature/features_dev.csv', delimiter=',')
-testRatings = np.genfromtxt('features/Full Feature/ratings_dev.csv', delimiter=',')
+testRatingss = np.genfromtxt('features/Full Feature/ratings_dev.csv', delimiter=',')
 
-testRatings = np.mean(testRatings.astype(np.float64), axis = 1)
+testRatings = np.mean(testRatingss.astype(np.float64), axis = 1)
 
 mean, variance= m.predict(testFeat)  
 quantiles = m.predict_quantiles(testFeat)
@@ -238,12 +255,15 @@ quantiles = m.predict_quantiles(testFeat)
 CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
 print("CCC is " + CCC)
 #fullPlot(mean, quantiles, name=('Basic' + str(0)), CCC=CCC, num = 0)
-x = 364
+x = 709
 while (m.optimize(optimizer = 'SCG', messages=True, max_iters=200).status == 'maxiter exceeded'):
     mean, variance = m.predict(testFeat)  
     quantiles = m.predict_quantiles(testFeat)
     CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
     print("CCC is " + CCC)
+    MSEval = MSE(mean, testRatings, testRatingss)
+    print("MSE is " + str(MSEval))
+    print("MSE sum is " + str(MSEval.sum()))
     #fullPlot(mean, quantiles, name=('BasicRecent'), CCC=CCC, num = x)
     f = open('BasicFinal/Basic' + str(x) + '.txt', mode='w')
     f.write("Final CCC is " + CCC)
@@ -253,6 +273,8 @@ while (m.optimize(optimizer = 'SCG', messages=True, max_iters=200).status == 'ma
     f.write('\n' + str(m.rbf.lengthscale))  
     f.write("\nInducing Inputs:")  
     f.write('\n' + str(m.inducing_inputs))
+    f.write("MSE is " + str(MSEval))
+    f.write("MSE sum is " + str(MSEval.sum()))
     f.close()
     saveModel(m, name=('BasicFinal/Basic' + str(x) + '.npy'))
     x += 1
