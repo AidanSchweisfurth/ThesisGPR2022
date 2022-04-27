@@ -120,19 +120,32 @@ def SLP(mean, variance, annotators):
 
     return total
 
-def fullPlot(mean, quantiles, name="Plot.png", CCC=0, num = 0):
+def fullPlot(mean, quantiles, name="Plot.png", CCC=0, num = 0, mean2=None, quantiles2=None):
     for i in range(1, 10):
         val = np.arange(4, 300.04, 0.04)
         # fig = plt.figure()
         # ax = fig.add_subplot(111)
-        #plt.fill_between(val, quantiles[0].flatten(), quantiles[1].flatten(),
-        # print(val.shape)
-        # print(mean[(i-1)*7401:i*7401].shape)
+        #plt.fill_between(val, quantiles[0].flatten()[(i-1)*7401:i*7401], quantiles[1].flatten()[(i-1)*7401:i*7401],
         plt.fill_between(val, quantiles[0][(i-1)*7401:i*7401], quantiles[1][(i-1)*7401:i*7401],
                         facecolor="powderblue", # The fill color
                         color='royalblue',       # The outline color
-                        alpha=0.2)          # Transparency of the fill
-        plt.plot(val, mean[(i-1)*7401:i*7401])
+                        alpha=0.2, label='95%% Confidence Interval')          # Transparency of the fill
+        #plt.plot(val, quantiles[0][(i-1)*7401:i*7401])
+        #plt.plot(val, quantiles[1][(i-1)*7401:i*7401])
+        # plt.plot(val, mean2[(i-1)*7401:i*7401], color=(0.12156862745098039, 0.4666666666666667, 0.7058823529411765))
+        plt.plot(val, mean[(i-1)*7401:i*7401], label='Mean Prediction')
+        # plt.plot(val, quantiles2[0].flatten()[(i-1)*7401:i*7401], color=(0.12156862745098039, 0.4666666666666667, 0.7058823529411765))
+        # plt.plot(val, quantiles[0][(i-1)*7401:i*7401], color='Orange', label='Warped')
+        # plt.plot(val, quantiles2[1].flatten()[(i-1)*7401:i*7401], color=(0.12156862745098039, 0.4666666666666667, 0.7058823529411765), label='Basic')
+        # plt.plot(val, quantiles[1][(i-1)*7401:i*7401], color='Orange')
+        # #plt.fill_between(val, quantiles2[0].flatten()[(i-1)*7401:i*7401], quantiles[1].flatten()[(i-1)*7401:i*7401],
+        # plt.fill_between(val, quantiles[0][(i-1)*7401:i*7401], quantiles[1][(i-1)*7401:i*7401],
+        #                 facecolor="lightcoral", # The fill color
+        #                 color='firebrick',       # The outline color
+        #                 alpha=0.2)          # Transparency of the fill
+        #plt.plot(val, quantiles2[0][(i-1)*7401:i*7401])
+        #plt.plot(val, quantiles2[1][(i-1)*7401:i*7401])
+        #plt.plot(val, mean2[(i-1)*7401:i*7401])
         ratings = getRatings('ratings_individual/arousal/dev_' + str(i) + '.csv')  
         for t in range(6):
             plt.plot(val, list(map(float, ratings[:, t])))
@@ -141,21 +154,15 @@ def fullPlot(mean, quantiles, name="Plot.png", CCC=0, num = 0):
             # plt.plot(val, list(map(float, getRating(4))))
             # plt.plot(val, list(map(float, getRating(5))))
             # plt.plot(val, list(map(float, getRating(6))))
-        plt.title("GPR Warped 6 Annotators F" + str(i))
+        plt.title("Warped Dev " + str(i) + " Regression", fontsize=24)
+        plt.xlabel('Time(Seconds)', fontsize=20)
+        plt.ylabel("Arousal", fontsize=20)
+        plt.legend(fontsize=20)
         fig = plt.gcf()
         fig.set_size_inches((25, 10), forward=False)
-        fig.savefig('WarpedFinal/' + name + '_Dev_' + str(i) + '.png', dpi=500)
-        plt.close()
-        #plt.show()
-    f = open('WarpedFinal/Warped' + str(num) + '.txt', mode='w')
-    f.write("Final CCC is " + CCC)
-    f.write("\nValues:")
-    f.write('\n' + str(m))
-    f.write("\nLength Scales:")
-    f.write('\n' + str(m.rbf.lengthscale))  
-    f.write("\nInducing Inputs:")  
-    f.write('\n' + str(m.inducing_inputs))
-    f.close()
+        fig.savefig('Tests/' + name + '_Dev_' + str(i) + '.png', dpi=500)
+        #plt.close()
+        plt.show()
 
 def extractFeatures(filename, output, id):
     fs, data = wavfile.read(filename)
@@ -194,106 +201,172 @@ def loadFile(X, Y, name='tester.npy'):
 def saveModel(m, name='tester.npy'):
     np.save(name, m.param_array)
 
-def MSE(predicted, actual, variance):
-    n = len(predicted)
-    minVar = min(variance)
-    maxVar = max(variance)
+def MSE(predicted, predicted2, actual, Y, name=""):
+    n = np.ceil(len(predicted)/10)
+    variance = Y
+    minVar = variance.min()
+    maxVar = variance.max()
     decile = (maxVar - minVar)/10
-    print(n)
-    print(maxVar)
-    print(minVar)
-    print(decile)
-    MSEs = np.zeros(10, dtype=float)
-    for i in range(0, len(variance)):
-        print(variance[i]-minVar)
-        print(np.floor((variance[i]-minVar)/decile))
-        MSEs[int(np.floor((variance[i]-minVar)/decile))] += (actual - predicted)**2
-    return MSEs/n
+    MSEs = np.zeros(variance.size, dtype=float)
+    for i in range(0, variance.size):
+        MSEs[i] = (actual[i] - predicted[i])**2
+    
+    final = np.sort(MSEs)
+    final = np.array_split(final, 10)
+    i = 0
+    for a in final:
+        final[i] = a.sum()
+        i += 1
+
+    totals = np.zeros(10, dtype=float)
+    i = 1
+
+    for p in range(len(totals)):
+        totals[p] += np.sum(final[:i])
+        i += 1
+
+    i = 1
+    for p in range(len(totals)):
+        totals[p] = totals[p] / (n*i)
+        i += 1
+
+    final = final/n
+#######################################################
+    MSEs2 = np.zeros(variance.size, dtype=float)
+    for i in range(0, variance.size):
+        MSEs2[i] = (actual[i] - predicted2[i])**2
+    
+    final2 = np.sort(MSEs2)
+    final2 = np.array_split(final2, 10)
+    i = 0
+    for a in final2:
+        final2[i] = a.sum()
+        i += 1
+
+    totals2 = np.zeros(10, dtype=float)
+    i = 1
+
+    for p in range(len(totals2)):
+        totals2[p] += np.sum(final2[:i])
+        i += 1
+    
+    i = 1
+    for p in range(len(totals2)):
+        totals2[p] = totals2[p] / (n*i)
+        i += 1
+
+    final2 = final2/n
+    #############################################
+
+    axis = np.arange(minVar, maxVar, decile)
+    labels = []
+    for a in range(len(axis)):
+        labels.append(str(axis[a]-decile/2) + '-' + str(axis[a] + decile/2))
+    width = (np.max(axis) - np.min(axis))/30
+    plt.plot(axis,final, linestyle='-', marker='x')
+    plt.bar(axis, totals, width=width)
+    plt.title('Warped MSE Plot')
+    plt.xlabel('Variances')
+    plt.xticks(axis)
+    plt.ylabel('Error')
+    plt.ylim(0, 0.17)
+    fig = plt.gcf()
+    fig.set_size_inches((18, 10), forward=False)
+    fig.savefig('End Results/T-' + name + 'MSEWarped.png', dpi=500)
+    plt.close()
+
+    plt.plot(axis,final2, linestyle='-', marker='x')
+    plt.bar(axis, totals2, width=width)
+    plt.title('Basic MSE Plot')
+    plt.xlabel('Variances')
+    plt.xticks(axis)
+    plt.ylabel('Error')
+    plt.ylim(0, 0.17)
+    fig = plt.gcf()
+    fig.set_size_inches((18, 10), forward=False)
+    fig.savefig('End Results/T-' + name + 'MSEBasic.png', dpi=500)
+    plt.close()
+    
+    
+    plt.plot(axis,final2, linestyle='-', marker='o')
+    plt.plot(axis,final, linestyle='-', marker='x')
+    plt.bar([i-0.5*width for i in axis], totals2, width=width, label='Basic')
+    plt.bar([i+0.5*width for i in axis], totals, width=width, label='Warped')
+    plt.xticks(axis)
+    plt.ylim(0, 0.17)
+    #plt.xlim(0.01, 0.41)
+    plt.title('MSE Plot', fontsize=20)
+    plt.xlabel('Standard Deviation', fontsize=18)
+    plt.ylabel('Error', fontsize=18)
+    plt.legend()
+    fig = plt.gcf()
+    fig.set_size_inches((18, 10), forward=False)
+    fig.savefig('End Results/R-' + name + 'MSE.png', dpi=500)
+    plt.close()
+    print("Warped MSE is " + str(final))
+    print("Basic MSE is " + str(final2))
+
         
-# extractFeatures('train_1.wav', 'features/PCA/train_1.csv', 1)
-# extractFeatures('train_2.wav', 'features/PCA/train_2.csv', 1)
-# extractFeatures('train_3.wav', 'features/PCA/train_3.csv', 1)
-# extractFeatures('train_4.wav', 'features/PCA/train_4.csv', 1)
-# extractFeatures('train_5.wav', 'features/PCA/train_5.csv', 1)
-# extractFeatures('train_6.wav', 'features/PCA/train_6.csv', 1)
-# exit()
 
-#testFeat, testRatings = getInputs(file = "dev_")
-
-# print(testRatings.shape)
 kernel = GPy.kern.RBF(88, 1, 100, ARD=True)
 X = np.genfromtxt('features/Full Feature/features_train.csv', delimiter=',')
 Y = np.genfromtxt('features/Full Feature/ratings_train.csv', delimiter=',')
+
 #X, Y = getInputs(file = "test_")
 # print(X.shape)
 # print(Y.shape)
-m = loadFile(X, Y, 'WarpedFinal/Warped106.npy')
-m_load = GPy.models.SparseGPRegression(X, Y, GPy.kern.RBF(88, 1, 100, ARD=True), infer=NewInference(), initialize = False)
-m_load.update_model(False)
-m_load.initialize_parameter()
-m_load[:] = np.load('BasicFinal/Basic106.npy')
-m_load.update_model(True)
-#m = WarpedModelSimple(X, Y, kernel)
-#m = GPy.models.SparseGPRegression(X, Y, kernel, infer=NewInference())
+mW = loadFile(X, Y, 'WarpedFinal/Final.npy')
+mB = GPy.models.SparseGPRegression(X, Y, GPy.kern.RBF(88, 1, 100, ARD=True), infer=NewInference(), initialize = False)
+mB.update_model(False)
+mB.initialize_parameter()
+mB[:] = np.load('BasicFinal/Final.npy')
+mB.update_model(True)
 
 testFeat = np.genfromtxt('features/Full Feature/features_dev.csv', delimiter=',')
 testRatingss = np.genfromtxt('features/Full Feature/ratings_dev.csv', delimiter=',')
 
 testRatings = np.mean(testRatingss.astype(np.float64), axis = 1)
 
-mean, variance, new = m.predict(testFeat)  
-quantiles = m.predict_quantiles(testFeat)
-# print(mean.flatten().shape)
-# print(testRatings.flatten().shape)
+mean1, variance, new = mW.predict(testFeat) 
+quantiles = mW.predict_quantiles(testFeat) 
+mean2, variance = mB.predict(testFeat)  
+quantiles2 = mB.predict_quantiles(testFeat) 
+fullPlot(mean1, quantiles, name=('Warped'), quantiles2=quantiles2, mean2=mean2)
+#MSE(mean1, mean2, testRatings, np.std(testRatingss, axis=1))
 exit()
-print("Warped")
-CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
-print("CCC is " + CCC)
-MSEval = MSE(mean, testRatings, variance)
-print("MSE is " + MSEval)
-SLPval = SLP(mean, variance, testRatingss)
-print("SLP is " + str(SLPval))
+#### Setup ####
+values =  np.column_stack((np.std(testRatingss, axis=1), testRatings.flatten().astype(np.float)))
+values = np.column_stack((values, mean1.flatten().astype(np.float)))
+values = np.column_stack((values, mean2.flatten().astype(np.float)))
+values = np.column_stack((values, np.abs(testRatings)))
 
-mean, variance, new = m_load.predict(testFeat)  
-quantiles = m_load.predict_quantiles(testFeat)
-# print(mean.flatten().shape)
-# print(testRatings.flatten().shape)
-print("Basic:")
-CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
-print("CCC is " + CCC)
-MSEval = MSE(mean, testRatings, variance)
-print("MSE is " + str(MSEval))
-SLPval = SLP(mean, variance, testRatingss)
-print("SLP is " + str(SLPval))
+array = np.zeros((1, 2))
+for a in testRatingss:
+    array = np.vstack((array, scipy.stats.t.interval(alpha=0.95, df=len(a)-1, loc=np.mean(a), scale=scipy.stats.sem(a))))
+array = array[1:, :]
+values = np.column_stack((values, np.maximum(np.abs(array[:, 0]), np.abs(array[:, 1]))))
 
-exit()
-#fullPlot(mean, quantiles, name=('Warped' + str(22)), CCC=CCC, num = 0)
-x = 64
-while (m.optimize(optimizer = 'SCG', messages=True, max_iters=200).status == 'maxiter exceeded'):
-    mean, variance, new = m.predict(testFeat)  
-    quantiles = m.predict_quantiles(testFeat)
-    CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
-    print("CCC is " + CCC)
-    #fullPlot(mean, quantiles, name=('WarpedRecent'), CCC=CCC, num = x)
-    f = open('BasicFinal/Basic' + str(x) + '.txt', mode='w')
-    f.write("Final CCC is " + CCC)
-    f.write("\nValues:")
-    f.write('\n' + str(m))
-    f.write("\nLength Scales:")
-    f.write('\n' + str(m.rbf.lengthscale))  
-    f.write("\nInducing Inputs:")  
-    f.write('\n' + str(m.inducing_inputs))
-    f.close()
-    saveModel(m, name=('WarpedFinal/Warped' + str(x) + '.npy'))
-    x += 1
-    
+#### Biggest 10% of std of annotations ####
+values = values[values[:, 0].argsort()]
+CCC = str(calculateCCC(values[59408:, 2], values[59408:, 1]))
+print("CCC Warped 10% std is " + CCC)
+CCC = str(calculateCCC(values[59408:, 3], values[59408:, 1]))
+print("CCC Basic 10% std is " + CCC)
+MSE(values[59408:, 2], values[54908:, 3], values[59408:, 1], values[59408:, 0], name="STD")
 
-print('Finished')
-print('------------------------------')
-mean, variance, new = m.predict(testFeat)  
-quantiles = m.predict_quantiles(testFeat)
-CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
-print("Final CCC is " + CCC)
-saveModel(m, name=('WarpedFinal/Final.npy'))
-fullPlot(mean, quantiles, name=('Warped' + str(x)), num = x, CCC=CCC)
+#### Biggest 10% of mean of annotations ####
+values = values[values[:, 4].argsort()]
+CCC = str(calculateCCC(values[59408:, 2], values[59408:, 1]))
+print("CCC Warped 10% mean is " + CCC)
+CCC = str(calculateCCC(values[59408:, 3], values[59408:, 1]))
+print("CCC Basic 10% mean is " + CCC)
+MSE(values[59408:, 2], values[59408:, 3], values[59408:, 1], values[59408:, 0], name="Mean")
+
+#### Ones where percentiles are highest ####
+values = values[values[:, 5].argsort()]
+CCC = str(calculateCCC(values[59408:, 2], values[59408:, 1]))
+print("CCC Warped highest Quantiles is " + CCC)
+CCC = str(calculateCCC(values[59408:, 3], values[59408:, 1]))
+print("CCC Basic highest Quantiles is " + CCC)
+MSE(values[59408:, 2], values[59408:, 3], values[59408:, 1], values[59408:, 0], name="quantiles")
 
