@@ -12,17 +12,29 @@ from inference import NewInference
 import scipy
 
 from warpingFunction import WarpingFunction
+
+#########################################
+# Testing and Comparisons File
+#########################################
+# This file is used to generate the MSE used in the Report
+
+# ratingDir contains files for ratings of each file, these are pulled directly from RECOLA
+# outputDir is directory where final files are saved
+
 testRatingsFile = 'ratings_individual/arousal/train_2.csv'
+outputDir = 'Test/'
+ratingsDir = 'ratings_individual/arousal/'
+featureDir = 'features/Full Feature/'
 
 def extractRating(file):
     vals = np.empty(shape=[0, 6])
-    f = open('ratings_individual/arousal/' + file, 'rt')
+    f = open(ratingsDir + file, 'rt')
     data = csv.reader(f)
     for row in data:
         x = row[0].split(';')
         val = x[1:]
         vals = np.vstack((vals, [val]))
-    my_data = np.genfromtxt('features/Full Feature/' + file, delimiter=',')
+    my_data = np.genfromtxt(featureDir + file, delimiter=',')
     f.close()
     return my_data, vals[101:]
 
@@ -56,42 +68,6 @@ def getInputs(file='train_'):
     np.savetxt('features/Full Feature/ratings_dev.csv', ratings.astype(float), delimiter=",")
     return features, ratings
 
-def getRaw():
-    ratings = np.empty(shape=[0, 6])
-    f = open(testRatingsFile, 'rt')
-    data = csv.reader(f)
-    for row in data:
-        x = row[0].split(';')
-        val = x[1:]
-        ratings = np.vstack((ratings, [val]))
-    vals = ratings[101:]
-    f.close()
-    return vals
-
-def getRatings(testRatingsFile):
-    ratings = np.empty(shape=[0, 6])
-    f = open(testRatingsFile, 'rt')
-    data = csv.reader(f)
-    for row in data:
-        x = row[0].split(';')
-        val = x[1:]
-        ratings = np.vstack((ratings, [val]))
-    vals = ratings[101:]
-    f.close()
-    return vals
-
-def getRating(rater=1, testRatingsFile=''):
-    ratings = np.empty(shape=[0, 1])
-    f = open(testRatingsFile, 'rt')
-    data = csv.reader(f)
-    for row in data:
-        x = row[0].split(';')
-        val = x[rater]
-        ratings = np.vstack((ratings, [val]))
-    vals = ratings[101:]
-    f.close()
-    return vals
-
 def calculateCCC(predict, standard):
     cor=np.corrcoef(standard,predict)[0][1]
 
@@ -110,6 +86,7 @@ def calculateCCC(predict, standard):
     return numerator/denominator
 
 def SLP(mean, variance, annotators):
+    ## went unused, unliekly to work correctly
     total = 0
     for i in range(0,5):
         for t in range(len(mean)):
@@ -119,76 +96,6 @@ def SLP(mean, variance, annotators):
             total += val
 
     return total
-
-def fullPlot(mean, quantiles, name="Plot.png", CCC=0, num = 0, mean2=None, quantiles2=None):
-    for i in range(1, 10):
-        val = np.arange(4, 300.04, 0.04)
-        # fig = plt.figure()
-        # ax = fig.add_subplot(111)
-        #plt.fill_between(val, quantiles[0].flatten()[(i-1)*7401:i*7401], quantiles[1].flatten()[(i-1)*7401:i*7401],
-        plt.fill_between(val, quantiles[0][(i-1)*7401:i*7401], quantiles[1][(i-1)*7401:i*7401],
-                        facecolor="powderblue", # The fill color
-                        color='royalblue',       # The outline color
-                        alpha=0.2, label='95%% Confidence Interval')          # Transparency of the fill
-        #plt.plot(val, quantiles[0][(i-1)*7401:i*7401])
-        #plt.plot(val, quantiles[1][(i-1)*7401:i*7401])
-        # plt.plot(val, mean2[(i-1)*7401:i*7401], color=(0.12156862745098039, 0.4666666666666667, 0.7058823529411765))
-        plt.plot(val, mean[(i-1)*7401:i*7401], label='Mean Prediction')
-        # plt.plot(val, quantiles2[0].flatten()[(i-1)*7401:i*7401], color=(0.12156862745098039, 0.4666666666666667, 0.7058823529411765))
-        # plt.plot(val, quantiles[0][(i-1)*7401:i*7401], color='Orange', label='Warped')
-        # plt.plot(val, quantiles2[1].flatten()[(i-1)*7401:i*7401], color=(0.12156862745098039, 0.4666666666666667, 0.7058823529411765), label='Basic')
-        # plt.plot(val, quantiles[1][(i-1)*7401:i*7401], color='Orange')
-        # #plt.fill_between(val, quantiles2[0].flatten()[(i-1)*7401:i*7401], quantiles[1].flatten()[(i-1)*7401:i*7401],
-        # plt.fill_between(val, quantiles[0][(i-1)*7401:i*7401], quantiles[1][(i-1)*7401:i*7401],
-        #                 facecolor="lightcoral", # The fill color
-        #                 color='firebrick',       # The outline color
-        #                 alpha=0.2)          # Transparency of the fill
-        #plt.plot(val, quantiles2[0][(i-1)*7401:i*7401])
-        #plt.plot(val, quantiles2[1][(i-1)*7401:i*7401])
-        #plt.plot(val, mean2[(i-1)*7401:i*7401])
-        ratings = getRatings('ratings_individual/arousal/dev_' + str(i) + '.csv')  
-        for t in range(6):
-            plt.plot(val, list(map(float, ratings[:, t])))
-            # plt.plot(val, list(map(float, getRating(2))))
-            # plt.plot(val, list(map(float, getRating(3))))
-            # plt.plot(val, list(map(float, getRating(4))))
-            # plt.plot(val, list(map(float, getRating(5))))
-            # plt.plot(val, list(map(float, getRating(6))))
-        plt.title("Warped Dev " + str(i) + " Regression", fontsize=24)
-        plt.xlabel('Time(Seconds)', fontsize=20)
-        plt.ylabel("Arousal", fontsize=20)
-        plt.legend(fontsize=20)
-        fig = plt.gcf()
-        fig.set_size_inches((25, 10), forward=False)
-        fig.savefig('Tests/' + name + '_Dev_' + str(i) + '.png', dpi=500)
-        #plt.close()
-        plt.show()
-
-def extractFeatures(filename, output, id):
-    fs, data = wavfile.read(filename)
-    window = 4
-    smile = opensmile.Smile(
-        feature_set=opensmile.FeatureSet.eGeMAPSv02,
-        feature_level=opensmile.FeatureLevel.Functionals,
-    )
-    vals = smile.process_file(filename, start=0, end=window)
-    array = pd.DataFrame(vals).to_numpy()
-    #vals.to_csv(output, index=False, mode = 'x', index_label = True)
-    print("Starting...")
-    print("-------------------------")
-    for x in range(int(4.04*100), math.ceil((len(data)/fs))*100 + 1, int(0.04*100)):
-        i = x/100
-        vals = smile.process_file(filename, start=i-window, end=i)
-        array = np.concatenate((array, pd.DataFrame(vals).to_numpy()), axis=0)
-        #vals.to_csv(output, index=False, mode = 'a', index_label = False, header = False)
-        if (i == 40 or i == 80 or i == 120 or i == 160 or i == 200 or i == 240 or i==280):
-            print("Progress " + str(i))
-
-    pca = PCA(n_components=40)
-    pca.fit(array)
-    new = pca.transform(array)
-    np.savetxt(output, new, delimiter=",")
-    print("Completed")
 
 def loadFile(X, Y, name='tester.npy'):
     m_load = WarpedModelSimple(X, Y, GPy.kern.RBF(88, 1, 100, ARD=True), initialize = False)
@@ -272,7 +179,7 @@ def MSE(predicted, predicted2, actual, Y, name=""):
     plt.ylim(0, 0.17)
     fig = plt.gcf()
     fig.set_size_inches((18, 10), forward=False)
-    fig.savefig('End Results/T-' + name + 'MSEWarped.png', dpi=500)
+    fig.savefig(outputDir + 'T-' + name + 'MSEWarped.png', dpi=500)
     plt.close()
 
     plt.plot(axis,final2, linestyle='-', marker='x')
@@ -284,7 +191,7 @@ def MSE(predicted, predicted2, actual, Y, name=""):
     plt.ylim(0, 0.17)
     fig = plt.gcf()
     fig.set_size_inches((18, 10), forward=False)
-    fig.savefig('End Results/T-' + name + 'MSEBasic.png', dpi=500)
+    fig.savefig(outputDir + 'T-' + name + 'MSEBasic.png', dpi=500)
     plt.close()
     
     
@@ -301,39 +208,43 @@ def MSE(predicted, predicted2, actual, Y, name=""):
     plt.legend()
     fig = plt.gcf()
     fig.set_size_inches((18, 10), forward=False)
-    fig.savefig('End Results/R-' + name + 'MSE.png', dpi=500)
+    fig.savefig(outputDir + 'R-' + name + 'MSE.png', dpi=500)
     plt.close()
     print("Warped MSE is " + str(final))
     print("Basic MSE is " + str(final2))
 
-        
+########## Extract Features from files #############
+X, Y = getInputs(file = "train_")
+#X = np.genfromtxt('features/Full Feature/features_train.csv', delimiter=',')
+#Y = np.genfromtxt('features/Full Feature/ratings_train.csv', delimiter=',')
 
-kernel = GPy.kern.RBF(88, 1, 100, ARD=True)
-X = np.genfromtxt('features/Full Feature/features_train.csv', delimiter=',')
-Y = np.genfromtxt('features/Full Feature/ratings_train.csv', delimiter=',')
+testFeat, testRatingss = getInputs(file = "dev_")
+#testFeat = np.genfromtxt('features/Full Feature/features_dev.csv', delimiter=',')
+#testRatingss = np.genfromtxt('features/Full Feature/ratings_dev.csv', delimiter=',')
 
-#X, Y = getInputs(file = "test_")
-# print(X.shape)
-# print(Y.shape)
+#take mean of annotators for testing
+testRatings = np.mean(testRatingss.astype(np.float64), axis = 1)
+
+########## Generate Both Gaussian Processes ##############
+# location to load final hyperparameters from
 mW = loadFile(X, Y, 'WarpedFinal/Final.npy')
+
 mB = GPy.models.SparseGPRegression(X, Y, GPy.kern.RBF(88, 1, 100, ARD=True), infer=NewInference(), initialize = False)
 mB.update_model(False)
 mB.initialize_parameter()
+# location to load final hyperparameters from
 mB[:] = np.load('BasicFinal/Final.npy')
 mB.update_model(True)
 
-testFeat = np.genfromtxt('features/Full Feature/features_dev.csv', delimiter=',')
-testRatingss = np.genfromtxt('features/Full Feature/ratings_dev.csv', delimiter=',')
-
-testRatings = np.mean(testRatingss.astype(np.float64), axis = 1)
-
+####### Create Predictions Of Both ##################
 mean1, variance, new = mW.predict(testFeat) 
 quantiles = mW.predict_quantiles(testFeat) 
 mean2, variance = mB.predict(testFeat)  
-quantiles2 = mB.predict_quantiles(testFeat) 
-fullPlot(mean1, quantiles, name=('Warped'), quantiles2=quantiles2, mean2=mean2)
-#MSE(mean1, mean2, testRatings, np.std(testRatingss, axis=1))
-exit()
+quantiles2 = mB.predict_quantiles(testFeat)
+
+#Generate combined MSE graphs
+MSE(mean1, mean2, testRatings, np.std(testRatingss, axis=1))
+
 #### Setup ####
 values =  np.column_stack((np.std(testRatingss, axis=1), testRatings.flatten().astype(np.float)))
 values = np.column_stack((values, mean1.flatten().astype(np.float)))

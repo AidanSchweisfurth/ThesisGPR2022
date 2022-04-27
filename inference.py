@@ -11,6 +11,13 @@ log_2_pi = np.log(2*np.pi)
 import logging, itertools
 logger = logging.getLogger('vardtc')
 
+#############################
+# New Inference Function
+#############################
+# an inference function that combines all annotators in the generation of return values
+# largely just modified Var_DTC file from GPy but inference is run for each annotator and the results are combined
+
+
 class NewInference(LatentFunctionInference):
     """
     An object for inference when the likelihood is Gaussian, but we want to do sparse inference.
@@ -69,20 +76,7 @@ class NewInference(LatentFunctionInference):
         return Y * prec # TODO cache this, and make it effective
 
     def inference(self, kern, X, Z, likelihood, Y, Y_metadata=None, mean_function=None, precision=None, Lm=None, dL_dKmm=None, psi0=None, psi1=None, psi2=None, Z_tilde=None):
-        # pool = ThreadPool(processes=5)
-        # #print(np.array([self.Y_normalized[:, 0]]).T.shape)
-
-        # vals1 = (kern, X, Z, likelihood, np.array([Y[:, 0]]).T, Y_metadata, mean_function,)
-        # res1 = pool.apply_async(self.calcer, vals1)
-        # vals2 = (kern, X, Z, likelihood, np.array([Y[:, 1]]).T, Y_metadata, mean_function,)
-        # res2 = pool.apply_async(self.calcer, vals2)
-        # vals3 = (kern, X, Z, likelihood, np.array([Y[:, 2]]).T, Y_metadata, mean_function,)
-        # res3 = pool.apply_async(self.calcer, vals3)
-        # vals4 = (kern, X, Z, likelihood, np.array([Y[:, 3]]).T, Y_metadata, mean_function,)
-        # res4 = pool.apply_async(self.calcer, vals4)
-        # vals5 = (kern, X, Z, likelihood, np.array([Y[:, 4]]).T, Y_metadata, mean_function,)
-        # res5 = pool.apply_async(self.calcer, vals5)
-
+        # runs the Var_dtc inference function on each annotator and combines the values
         marginal, grad_dict, woodbury_inv, vec1, Kmm, Lm = \
         self.calcer(kern, X, Z, likelihood, np.array([Y[:, 0]]).T, Y_metadata=Y_metadata, mean_function=mean_function)
         marg1, grad1, woodbury_inv, vec2, Kmm, Lm = \
@@ -95,12 +89,12 @@ class NewInference(LatentFunctionInference):
         self.calcer(kern, X, Z, likelihood, np.array([Y[:, 4]]).T, Y_metadata=Y_metadata, mean_function=mean_function)
         marg5, grad5, woodbury_inv, vec6, Kmm, Lm = \
         self.calcer(kern, X, Z, likelihood, np.array([Y[:, 5]]).T, Y_metadata=Y_metadata, mean_function=mean_function)
-        #print("marg: " + str(marg1) + " " + str(marg2) + " " + str(marg3) + " " + str(marg4) + " " + str(marg5) + " " + str(marg6))
+        
         
         vec = (vec1 + vec2 + vec3 + vec4 + vec5 + vec6)/6
         posterior = Posterior(woodbury_inv=woodbury_inv, woodbury_vector=vec, K=Kmm, mean=None, cov=None, K_chol=Lm)
         marginal += marg1 + marg2 + marg3 + marg4 + marg5
-        #print("equals " + str(self._log_marginal_likelihood))
+
         grad_dict['dL_dKmm'] = grad_dict['dL_dKmm'] + grad1['dL_dKmm'] + grad2['dL_dKmm'] + grad3['dL_dKmm'] + grad4['dL_dKmm'] + grad5['dL_dKmm']
         grad_dict['dL_dKdiag'] = grad_dict['dL_dKdiag'] + grad1['dL_dKdiag'] + grad2['dL_dKdiag'] + grad3['dL_dKdiag'] + grad4['dL_dKdiag'] + grad5['dL_dKdiag']
         grad_dict['dL_dKnm'] = grad_dict['dL_dKnm'] + grad1['dL_dKnm'] + grad2['dL_dKnm'] + grad3['dL_dKnm'] + grad4['dL_dKnm'] + grad5['dL_dKnm']
@@ -109,7 +103,7 @@ class NewInference(LatentFunctionInference):
         return posterior, marginal, grad_dict     
 
     def calcer(self, kern, X, Z, likelihood, Y, Y_metadata=None, mean_function=None, precision=None, Lm=None, dL_dKmm=None, psi0=None, psi1=None, psi2=None, Z_tilde=None):
-        #print('what')
+        # Var_dtc inference function essentially
         num_data, output_dim = Y.shape
         num_inducing = Z.shape[0]
 

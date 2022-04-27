@@ -12,21 +12,40 @@ from inference import NewInference
 import scipy
 
 from warpingFunction import WarpingFunction
+########################################
+# Warped Regression File
+########################################
+# this file optimizes a warped system using SCG and INverse Cumulitive Gaussian Warping Function
+# features pulled from below featureDir variable
+# features extracted using the extractFeatures function
+
+### Example of Extracting Features###
+# extractFeatures('train_1.wav', 'features/88/train_1.csv')
+# extractFeatures('recordings/train_8.wav', featureDir + 'train_8.csv')
+
+# ratingDir contains files for ratings of each file, these are pulled directly from RECOLA
+# outputDir is directory where final files are saved
+
+
 testRatingsFile = 'ratings_individual/arousal/train_2.csv'
+outputDir = 'WarpedFinal/'
+ratingsDir = 'ratings_individual/arousal/'
+featureDir = 'features/Full Feature/'
 
 def extractRating(file):
     vals = np.empty(shape=[0, 6])
-    f = open('ratings_individual/arousal/' + file, 'rt')
+    f = open(ratingsDir + file, 'rt')
     data = csv.reader(f)
     for row in data:
         x = row[0].split(';')
         val = x[1:]
         vals = np.vstack((vals, [val]))
-    my_data = np.genfromtxt('features/Full Feature/' + file, delimiter=',')
+    my_data = np.genfromtxt(featureDir + file, delimiter=',')
     f.close()
     return my_data, vals[101:]
 
 def getInputs(file='train_'):
+    #pulls all 9 files into single array for use
     features, ratings = extractRating(file + '1.csv')
     feat, rate = extractRating(file + '2.csv')
     features = np.vstack((features, feat))
@@ -52,8 +71,8 @@ def getInputs(file='train_'):
     feat, rate = extractRating(file + '9.csv')
     features = np.vstack((features, feat))
     ratings = np.vstack((ratings, rate))
-    np.savetxt('features/Full Feature/features_dev.csv', features, delimiter=",")
-    np.savetxt('features/Full Feature/ratings_dev.csv', ratings.astype(float), delimiter=",")
+    #np.savetxt('features/Full Feature/features_dev.csv', features, delimiter=",")
+    #np.savetxt('features/Full Feature/ratings_dev.csv', ratings.astype(float), delimiter=",")
     return features, ratings
 
 def getRaw():
@@ -120,34 +139,26 @@ def SLP(mean, variance, annotators):
 
     return total
 
-def fullPlot(mean, quantiles, name="Plot.png", CCC=0, num = 0):
+def fullPlot(mean, quantiles, name="Warped", CCC=0, num = 0):
+    #generates plot for all 9 output files with annotators included
     for i in range(1, 10):
         val = np.arange(4, 300.04, 0.04)
-        # fig = plt.figure()
-        # ax = fig.add_subplot(111)
-        #plt.fill_between(val, quantiles[0].flatten(), quantiles[1].flatten(),
-        # print(val.shape)
-        # print(mean[(i-1)*7401:i*7401].shape)
         plt.fill_between(val, quantiles[0][(i-1)*7401:i*7401], quantiles[1][(i-1)*7401:i*7401],
                         facecolor="powderblue", # The fill color
                         color='royalblue',       # The outline color
                         alpha=0.2)          # Transparency of the fill
         plt.plot(val, mean[(i-1)*7401:i*7401])
-        ratings = getRatings('ratings_individual/arousal/dev_' + str(i) + '.csv')  
+        ratings = getRatings(ratingsDir + 'dev_' + str(i) + '.csv')  
         for t in range(6):
             plt.plot(val, list(map(float, ratings[:, t])))
-            # plt.plot(val, list(map(float, getRating(2))))
-            # plt.plot(val, list(map(float, getRating(3))))
-            # plt.plot(val, list(map(float, getRating(4))))
-            # plt.plot(val, list(map(float, getRating(5))))
-            # plt.plot(val, list(map(float, getRating(6))))
+
         plt.title("GPR Warped 6 Annotators F" + str(i))
         fig = plt.gcf()
         fig.set_size_inches((25, 10), forward=False)
-        fig.savefig('Tests/' + name + '_Dev_' + str(i) + '.png', dpi=500)
+        fig.savefig(outputDir + name + '_Dev_' + str(i) + '.png', dpi=500)
         plt.close()
         #plt.show()
-    f = open('Tests/Warped' + str(num) + '.txt', mode='w')
+    f = open(outputDir + 'Warped' + str(num) + '.txt', mode='w')
     f.write("Final CCC is " + CCC)
     f.write("\nValues:")
     f.write('\n' + str(m))
@@ -177,10 +188,7 @@ def extractFeatures(filename, output, id):
         if (i == 40 or i == 80 or i == 120 or i == 160 or i == 200 or i == 240 or i==280):
             print("Progress " + str(i))
 
-    pca = PCA(n_components=40)
-    pca.fit(array)
-    new = pca.transform(array)
-    np.savetxt(output, new, delimiter=",")
+    np.savetxt(output, array, delimiter=",")
     print("Completed")
 
 def loadFile(X, Y, name='tester.npy'):
@@ -194,74 +202,92 @@ def loadFile(X, Y, name='tester.npy'):
 def saveModel(m, name='tester.npy'):
     np.save(name, m.param_array)
 
-def MSE(predicted, actual, Y):
-    n = len(predicted)
-    variance = np.std(Y, axis=1)
+def MSE(predicted, actual, Y, name='MSE'):
+    n = np.ceil(len(predicted)/10)
+    variance = Y
     minVar = variance.min()
     maxVar = variance.max()
     decile = (maxVar - minVar)/10
-    MSEs = np.zeros(10, dtype=float)
+    MSEs = np.zeros(variance.size, dtype=float)
     for i in range(0, variance.size):
-        #print(i)
-        val = np.floor((variance[i]-minVar)/decile)
-        if (val == 10):
-            val = 9
-        MSEs[int(val)] += (actual[i] - predicted[i])**2
-    final = MSEs/n
+        MSEs[i] = (actual[i] - predicted[i])**2
+    
+    final = np.sort(MSEs)
+    final = np.array_split(final, 10)
+    i = 0
+    for a in final:
+        final[i] = a.sum()
+        i += 1
+
+    totals = np.zeros(10, dtype=float)
+    i = 1
+
+    for p in range(len(totals)):
+        totals[p] += np.sum(final[:i])
+        i += 1
+
+    i = 1
+    for p in range(len(totals)):
+        totals[p] = totals[p] / (n*i)
+        i += 1
+
+    final = final/n
     axis = np.arange(minVar, maxVar, decile)
+    labels = []
+    for a in range(len(axis)):
+        labels.append(str(axis[a]-decile/2) + '-' + str(axis[a] + decile/2))
+    width = (np.max(axis) - np.min(axis))/30
     plt.plot(axis,final, linestyle='-', marker='x')
+    plt.bar(axis, totals, width=width)
     plt.title('Warped MSE Plot')
     plt.xlabel('Variances')
+    plt.xticks(axis)
     plt.ylabel('Error')
+    plt.ylim(0, 0.17)
     fig = plt.gcf()
-    fig.set_size_inches((25, 10), forward=False)
-    fig.savefig('Tests/MSE.png', dpi=500)
-    #fig.savefig('BasicFinal/MSE.png', dpi=500)
+    fig.set_size_inches((18, 10), forward=False)
+    fig.savefig('End Results/T-' + name + 'MSEWarped.png', dpi=500)
     plt.close()
-    return final
+
         
-# extractFeatures('train_1.wav', 'features/PCA/train_1.csv', 1)
-# extractFeatures('train_2.wav', 'features/PCA/train_2.csv', 1)
-# extractFeatures('train_3.wav', 'features/PCA/train_3.csv', 1)
-# extractFeatures('train_4.wav', 'features/PCA/train_4.csv', 1)
-# extractFeatures('train_5.wav', 'features/PCA/train_5.csv', 1)
-# extractFeatures('train_6.wav', 'features/PCA/train_6.csv', 1)
-# exit()
+########## Extract Features from files #############
+X, Y = getInputs(file = "train_")
+#X = np.genfromtxt('features/Full Feature/features_train.csv', delimiter=',')
+#Y = np.genfromtxt('features/Full Feature/ratings_train.csv', delimiter=',')
 
-#testFeat, testRatings = getInputs(file = "dev_")
+testFeat, testRatingss = getInputs(file = "dev_")
+#testFeat = np.genfromtxt('features/Full Feature/features_dev.csv', delimiter=',')
+#testRatingss = np.genfromtxt('features/Full Feature/ratings_dev.csv', delimiter=',')
 
-# print(testRatings.shape)
-kernel = GPy.kern.RBF(88, 1, 100, ARD=True)
-X = np.genfromtxt('features/Full Feature/features_train.csv', delimiter=',')
-Y = np.genfromtxt('features/Full Feature/ratings_train.csv', delimiter=',')
-#X, Y = getInputs(file = "test_")
-# print(X.shape)
-# print(Y.shape)
-m = loadFile(X, Y, 'Tests/Warped824.npy')
-
-#m = WarpedModelSimple(X, Y, kernel)
-#m = GPy.models.SparseGPRegression(X, Y, kernel, infer=NewInference())
-
-testFeat = np.genfromtxt('features/Full Feature/features_dev.csv', delimiter=',')
-testRatingss = np.genfromtxt('features/Full Feature/ratings_dev.csv', delimiter=',')
-
+#take mean of annotators for testing
 testRatings = np.mean(testRatingss.astype(np.float64), axis = 1)
 
-# mean, variance, new = m.predict(testFeat)  
-# quantiles = m.predict_quantiles(testFeat)
-# print(mean.flatten().shape)
-# print(testRatings.flatten().shape)
-# CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
-# print("CCC is " + CCC)
-#fullPlot(mean, quantiles, name=('Warped' + str(22)), CCC=CCC, num = 0)
-x = 825
+########### Load Gaussian Process ###############
+## load hyperparameters from file
+m = loadFile(X, Y, 'WarpedFinal/Warped708.npy')
+## generate new Gaussian Process
+# m = WarpedModelSimple(X, Y, GPy.kern.RBF(88, 1, 100, ARD=True), initialize = False)
+
+# x is starting number for files, set to 1 if new system desired, otherwise set to number after file title number
+x = 709
+
+######### Optimization Loop ###################
+
+# system does ~600 iterations per loop then pauses to save the data and start again
+# continues until convergence
 while (m.optimize(optimizer = 'SCG', messages=True, max_iters=200).status == 'maxiter exceeded'):
-    mean, variance, new = m.predict(testFeat)  
+    mean, variance = m.predict(testFeat)  
     quantiles = m.predict_quantiles(testFeat)
+
+    #calc current CCC
     CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
     print("CCC is " + CCC)
-    #fullPlot(mean, quantiles, name=('WarpedRecent'), CCC=CCC, num = x)
-    f = open('Tests/Warped' + str(x) + '.txt', mode='w')
+
+    # calc Current MSE
+    #MSE(mean, testRatings, np.std(testRatingss, axis=1))
+
+    # Save Hyperparameters to txt file
+    f = open(outputDir + 'Warped' + str(x) + '.txt', mode='w')
     f.write("Final CCC is " + CCC)
     f.write("\nValues:")
     f.write('\n' + str(m))
@@ -270,16 +296,19 @@ while (m.optimize(optimizer = 'SCG', messages=True, max_iters=200).status == 'ma
     f.write("\nInducing Inputs:")  
     f.write('\n' + str(m.inducing_inputs))
     f.close()
-    saveModel(m, name=('Tests/Warped' + str(x) + '.npy'))
+
+    # save in a reloadable format
+    saveModel(m, name=(outputDir + 'Warped' + str(x) + '.npy'))
+
     x += 1
     
 
 print('Finished')
 print('------------------------------')
-mean, variance, new = m.predict(testFeat)  
+mean, variance = m.predict(testFeat)  
 quantiles = m.predict_quantiles(testFeat)
 CCC = str(calculateCCC(mean.flatten().astype(np.float), testRatings.flatten().astype(np.float)))
 print("Final CCC is " + CCC)
-saveModel(m, name=('Tests/Final.npy'))
+saveModel(m, name=(outputDir + 'Final.npy'))
 fullPlot(mean, quantiles, name=('Warped' + str(x)), num = x, CCC=CCC)
 

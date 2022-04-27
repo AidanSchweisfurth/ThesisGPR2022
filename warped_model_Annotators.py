@@ -9,6 +9,11 @@ from inference import NewInference
 from GPy import likelihoods
 log_2_pi = np.log(2*np.pi)
 
+###########################
+# Warped Gaussian Process File
+############################
+# contains functions used wihtyin the gaussian process for calculations and warping
+
 class WarpedModelSimple(GPy.models.SparseGPRegression):
     def __init__(self, X, Y, kernel=None, Z=None, num_inducing=10, X_variance=None, mean_function=None, normalizer=None, mpi_comm=None, name='SparseModel', warping_function=None, likelihood=None, inference_method=None, Y_metadata=None):
         if X.ndim == 1:
@@ -42,9 +47,7 @@ class WarpedModelSimple(GPy.models.SparseGPRegression):
         self.Y_normalized = self.Y_normalized.copy()
 
     def transform_data(self):
-        """
-        Pass the input Y values through the warping function and store them in Y_Transformed
-        """
+        #y values of each annotator are warped
         if self.Y_Transformed is None:
             y1 = self.warping_function.f(self.Y_part[:, 0].copy()).copy()
             y2 = self.warping_function.f(self.Y_part[:, 1].copy()).copy()
@@ -56,24 +59,21 @@ class WarpedModelSimple(GPy.models.SparseGPRegression):
         return self.Y_Transformed
 
     def _get_warped_term(self, mean, std, gh_samples, pred_init=None):
+        # reverses warp on term
         arg1 = gh_samples.dot(std.T) * np.sqrt(2)
         arg2 = np.ones(shape=gh_samples.shape).dot(mean.T)
         val = self.warping_function.f_inv(arg1 + arg2, y=pred_init)
         return val
 
     def _get_warped_mean(self, mean, std, pred_init=None, deg_gauss_hermite=20):
-        """
-        Calculate the warped mean by using Gauss-Hermite quadrature.
-        """
+        # calculates warped mean. Bassed on Gaussian Hermite Quadrature
         gh_samples, gh_weights = np.polynomial.hermite.hermgauss(deg_gauss_hermite)
         gh_samples = gh_samples[:, None]
         gh_weights = gh_weights[None, :]
         return gh_weights.dot(self._get_warped_term(mean, std, gh_samples)) / np.sqrt(np.pi)
     
     def _get_warped_variance(self, mean, std, pred_init=None, deg_gauss_hermite=20):
-        """
-        Calculate the warped variance by using Gauss-Hermite quadrature.
-        """
+        # calculates warped variance. Bassed on Gaussian Hermite Quadrature
         gh_samples, gh_weights = np.polynomial.hermite.hermgauss(deg_gauss_hermite)
         gh_samples = gh_samples[:, None]
         gh_weights = gh_weights[None, :]
@@ -84,21 +84,7 @@ class WarpedModelSimple(GPy.models.SparseGPRegression):
         return arg1 - (arg2 ** 2)
 
     def predict(self, Xnew, likelihood=None, Y_metadata=None):
-        """Prediction on the new data
-
-        Parameters
-        ----------
-        Xnew : array_like, shape = (n_samples, n_features)
-            The test data.
-
-        Returns
-        -------
-        mean : array_like, shape = (n_samples, output.dim)
-            Posterior mean at the location of Xnew
-
-        var : array_like, shape = (n_samples, 1)
-            Posterior variance at the location of Xnew
-        """
+        # predictions generated on new data Xnew
  
         mean, var = super(WarpedModelSimple, self).predict(Xnew, kern=self.kernel, full_cov=False)
         std = np.sqrt(var)
@@ -106,37 +92,16 @@ class WarpedModelSimple(GPy.models.SparseGPRegression):
                             deg_gauss_hermite=20).T
         Wvar = self._get_warped_variance(mean, std, pred_init=None,
                                             deg_gauss_hermite=20).T
+
+        # removal of trivial warp
         Wmean = 2 * Wmean - 1
-        WvarNew = 2 * Wvar - 1
-        return Wmean, Wvar, WvarNew
-
-    def calculate_log(self):
-        """
-        legacy function
-        """
-        m = self.mean_function.f(self.X)
-        variance = self.likelihood.gaussian_variance(self.Y_metadata)
-        for annotator in annotators:
-            YYT_factor = annotator-m
-            Ky = self.kern.K(self.X).copy()
-            GPy.util.diag.add(Ky, variance+1e-8)
-
-            Wi, LW, LWi, W_logdet = GPy.util.linalg.pdinv(Ky)
-
-            alpha, _ = GPy.util.linalg.dpotrs(LW, YYT_factor, lower=1)
-
-            log_marginal =  0.5*(-annotator.size * log_2_pi - annotator.shape[1] * W_logdet - np.sum(alpha * YYT_factor))
-            jacobian = self.warping_function.fgrad_y(self.transform_data())
-            total = total + log_marginal + np.log(jacobian).sum()
-        self._log_marginal_likelihood = total
+        return Wmean, Wvar
 
     def log_likelihood(self):
-        """
-        Compute the Log marginal likelihood taking into account the jacobian terms of warping
-        """        
+        # Compute the Log marginal likelihood taking into account the jacobian terms of warping for each annotator
+       
         logLikelihood = GPy.core.GP.log_likelihood(self)
         Yval = self.transform_data()
-        # return logLikelihood + np.log(self.warping_function.fgrad_y(Yval)).sum()
         jacobian1 = self.warping_function.fgrad_y(Yval[:, 0])
         jacobian2 = self.warping_function.fgrad_y(Yval[:, 1])
         jacobian3 = self.warping_function.fgrad_y(Yval[:, 2])
@@ -169,22 +134,14 @@ class WarpedModelSimple(GPy.models.SparseGPRegression):
         output_dict["name"] = str(output_dict["name"])
         return WarpedModelSimple._build_from_input_dict(output_dict, data)
 
-    def predict_quantiles(self, X, quantiles=(2.5, 97.5), Y_metadata=None, likelihood=None, kern=None):
-        """
-        Get the predictive quantiles around the prediction at X
-
-        :param X: The points at which to make a prediction
-        :type X: np.ndarray (Xnew x self.input_dim)
-        :param quantiles: tuple of quantiles, default is (2.5, 97.5) which is the 95% interval
-        :type quantiles: tuple
-        :returns: list of quantiles for each X and predictive quantiles for interval combination
-        :rtype: [np.ndarray (Xnew x self.input_dim), np.ndarray (Xnew x self.input_dim)]
-        """
+    def predict_quantiles(self, X, quantiles=(2.5, 97.5), Y_metadata=None, likelihood=None, kern=None): 
+        #Generate 95% predictive Quantiles
         
         qs = super(WarpedModelSimple, self).predict_quantiles(X, quantiles, Y_metadata=Y_metadata, likelihood=likelihood, kern=kern)
         X = [self.warping_function.f_inv(q) for q in qs]
         X[0] = X[0].flatten()
         X[1] = X[1].flatten()
+        #reversal of trivial warp
         X[0] = [x * 2 - 1 for x in X[0]]
         X[1] = [x * 2 - 1 for x in X[1]]
         return X
